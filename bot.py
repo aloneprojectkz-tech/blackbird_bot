@@ -215,7 +215,7 @@ async def cmd_start(message: Message, state: FSMContext):
     else:
         kb = await get_keyboard(message.from_user.id)
         await message.answer(
-            "🦅 <b>Blackbird OSINT Bot</b>\n\nВыберите действие из меню ниже:",
+            "🦅 <b>Recon OSINT Bot</b>\n\nВыберите действие из меню ниже:",
             parse_mode="HTML",
             reply_markup=kb,
         )
@@ -227,11 +227,11 @@ async def callback_agree(call: CallbackQuery):
     await db.set_agreed_terms(pool, call.from_user.id)
     kb = await get_keyboard(call.from_user.id)
     await call.message.edit_text(
-        "✅ <b>Вы приняли условия использования.</b>\n\nДобро пожаловать в Blackbird OSINT Bot!",
+        "✅ <b>Вы приняли условия использования.</b>\n\nДобро пожаловать в Recon OSINT Bot!",
         parse_mode="HTML",
     )
     await call.message.answer(
-        "🦅 <b>Blackbird OSINT Bot</b>\n\nВыберите действие из меню ниже:",
+        "🦅 <b>Recon OSINT Bot</b>\n\nВыберите действие из меню ниже:",
         parse_mode="HTML",
         reply_markup=kb,
     )
@@ -266,7 +266,7 @@ async def show_web(message: Message):
         await message.answer("Сначала примите условия использования. Отправьте /start")
         return
     await message.answer(
-        f"🌐 <b>Веб-интерфейс Blackbird</b>\n\n"
+        f"🌐 <b>Веб-интерфейс Recon</b>\n\n"
         f"Перейдите по ссылке для доступа к полной версии:\n"
         f"<a href='{BLACKBIRD_WEB_URL}'>{BLACKBIRD_WEB_URL}</a>\n\n"
         f"В веб-версии доступны:\n"
