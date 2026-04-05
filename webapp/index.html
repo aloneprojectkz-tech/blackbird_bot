@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blackbird OSINT</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0c;
+    --surface: #111116;
+    --surface2: #18181f;
+    --border: #232330;
+    --accent: #e8ff47;
+    --accent2: #ff4757;
+    --text: #e8e8f0;
+    --muted: #5a5a72;
+    --found: #47ffa0;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Noise overlay ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: .4;
+  }
+
+  /* ── Scanlines ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,.08) 2px,
+      rgba(0,0,0,.08) 4px
+    );
+    pointer-events: none;
+    z-index: 9998;
+  }
+
+  /* ── Layout ── */
+  .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,12,.92);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .logo-text span { color: var(--accent); }
+
+  .header-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: 1px;
+  }
+
+  /* ── Hero ── */
+  .hero {
+    padding: 80px 0 60px;
+    text-align: center;
+    position: relative;
+  }
+
+  .hero-glow {
+    position: absolute;
+    top: -100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 400px;
+    background: radial-gradient(ellipse, rgba(232,255,71,.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .hero-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    display: block;
+  }
+
+  .hero h1 {
+    font-size: clamp(42px, 8vw, 80px);
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -3px;
+    margin-bottom: 20px;
+  }
+
+  .hero h1 .dim { color: var(--muted); }
+
+  .hero p {
+    font-size: 16px;
+    color: var(--muted);
+    max-width: 480px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+  }
+
+  /* ── Search card ── */
+  .search-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+
+  .search-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity .3s;
+  }
+
+  .search-card:focus-within::before { opacity: 1; }
+  .search-card:focus-within { border-color: rgba(232,255,71,.3); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: var(--surface2);
+    padding: 4px;
+    border-radius: 10px;
+    width: fit-content;
+  }
+
+  .tab {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 8px 20px;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    transition: all .2s;
+    color: var(--muted);
+    background: transparent;
+  }
+
+  .tab.active {
+    background: var(--accent);
+    color: #000;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 12px;
+  }
+
+  .input-wrap {
+    flex: 1;
+    position: relative;
+  }
+
+  .input-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-family: var(--mono);
+    font-size: 15px;
+    color: var(--text);
+    outline: none;
+    transition: border-color .2s;
+  }
+
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); }
+
+  .search-btn {
+    align-self: flex-end;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 14px 28px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .search-btn:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(232,255,71,.25); }
+  .search-btn:active { transform: translateY(0); }
+  .search-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .search-btn .btn-text { display: block; }
+  .search-btn .btn-loader { display: none; }
+  .search-btn.loading .btn-text { display: none; }
+  .search-btn.loading .btn-loader { display: block; }
+
+  /* ── Progress ── */
+  .progress-wrap {
+    display: none;
+    margin-top: 20px;
+  }
+
+  .progress-wrap.visible { display: block; }
+
+  .progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .progress-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+
+  .progress-pct {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+  }
+
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 99px;
+    width: 0%;
+    transition: width .4s ease;
+  }
+
+  .progress-status {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* ── Results ── */
+  #results { margin-top: 32px; }
+
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .results-title {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+
+  .results-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid;
+  }
+
+  .badge-found { color: var(--found); border-color: rgba(71,255,160,.3); background: rgba(71,255,160,.07); }
+  .badge-time  { color: var(--muted); border-color: var(--border); }
+
+  .category-group { margin-bottom: 24px; }
+
+  .category-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .category-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .account-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 8px;
+  }
+
+  .account-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-decoration: none;
+    display: block;
+    transition: all .15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .account-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--found);
+    transform: scaleY(0);
+    transition: transform .2s;
+  }
+
+  .account-card:hover {
+    border-color: rgba(71,255,160,.3);
+    transform: translateY(-1px);
+  }
+
+  .account-card:hover::before { transform: scaleY(1); }
+
+  .account-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .account-name .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--found);
+    flex-shrink: 0;
+  }
+
+  .account-url {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .account-meta {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .meta-item {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 6px;
+  }
+
+  .meta-item strong { color: var(--text); font-weight: 600; }
+
+  /* ── Empty state ── */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+  }
+
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .empty-sub { color: var(--muted); font-size: 14px; }
+
+  /* ── Error ── */
+  .error-msg {
+    background: rgba(255,71,87,.08);
+    border: 1px solid rgba(255,71,87,.3);
+    border-radius: 10px;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent2);
+  }
+
+  /* ── Stats strip ── */
+  .stats-strip {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 40px;
+  }
+
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── Footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    margin-top: 80px;
+    text-align: center;
+  }
+
+  footer p {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 2;
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── Animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0,0,0,.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    display: inline-block;
+  }
+
+  .fade-up { animation: fadeUp .4s ease both; }
+
+  .result-item { animation: fadeUp .3s ease both; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .cursor {
+    display: inline-block;
+    width: 2px; height: 1em;
+    background: var(--accent);
+    vertical-align: text-bottom;
+    animation: blink 1s step-end infinite;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .hero { padding: 48px 0 40px; }
+    .hero h1 { letter-spacing: -2px; }
+    .input-row { flex-direction: column; }
+    .stats-strip { grid-template-columns: 1fr; }
+    .account-grid { grid-template-columns: 1fr; }
+    .results-meta { flex-direction: column; align-items: flex-start; gap: 6px; }
+  }
+
+  /* ── Tooltip ── */
+  [data-tip] { position: relative; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-family: var(--mono);
+    font-size: 11px;
+    white-space: nowrap;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ── History sidebar ── */
+  .history-pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+
+  .history-pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    cursor: pointer;
+    color: var(--muted);
+    transition: all .15s;
+  }
+
+  .history-pill:hover { border-color: var(--accent); color: var(--accent); }
+
+  .history-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="container">
+    <div class="header-inner">
+      <a class="logo" href="#">
+        <div class="logo-icon">🦅</div>
+        <span class="logo-text">Black<span>bird</span></span>
+      </a>
+      <span class="header-badge">OSINT v2.0</span>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <div class="hero-glow"></div>
+      <span class="hero-tag">Open Source Intelligence</span>
+      <h1>Find <span class="dim">anyone</span><br>anywhere<span class="cursor"></span></h1>
+      <p>Поиск аккаунтов по username и email на 600+ платформах. Все данные из открытых источников.</p>
+    </div>
+  </section>
+
+  <div class="container">
+
+    <div class="stats-strip fade-up" id="statsStrip">
+      <div class="stat-box">
+        <span class="stat-num" id="statSites">600+</span>
+        <div class="stat-label">Сайтов в базе</div>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num" id="statSearches">—</span>
+        <div class="stat-label">Поисков выполнено</div>
+      </div>
+      <div class="stat-box">
+        <span class="stat-num" id="statFound">—</span>
+        <div class="stat-label">Аккаунтов найдено</div>
+      </div>
+    </div>
+
+    <div class="search-card fade-up" style="animation-delay:.1s">
+      <div class="tabs">
+        <button class="tab active" id="tabUsername" onclick="setTab('username')">USERNAME</button>
+        <button class="tab" id="tabEmail" onclick="setTab('email')">EMAIL</button>
+      </div>
+
+      <div class="input-row">
+        <div class="input-wrap">
+          <label class="input-label" id="inputLabel">Имя пользователя</label>
+          <input class="search-input" id="searchInput"
+                 type="text" placeholder="johndoe"
+                 autocomplete="off" spellcheck="false"
+                 onkeydown="if(event.key==='Enter') doSearch()">
+        </div>
+        <button class="search-btn" id="searchBtn" onclick="doSearch()">
+          <span class="btn-text">SEARCH</span>
+          <span class="btn-loader"><span class="spinner"></span></span>
+        </button>
+      </div>
+
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-header">
+          <span class="progress-label" id="progressLabel">СКАНИРОВАНИЕ...</span>
+          <span class="progress-pct" id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-status" id="progressStatus">Инициализация...</div>
+      </div>
+
+      <div id="historyBlock" style="display:none; margin-top:20px;">
+        <div class="history-label">Последние поиски</div>
+        <div class="history-pills" id="historyPills"></div>
+      </div>
+    </div>
+
+    <div id="results"></div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="container">
+    <p>
+      Blackbird OSINT — все данные получены из <strong>открытых источников</strong>.<br>
+      Основан на <a href="https://github.com/p1ngul1n0/blackbird" target="_blank">blackbird</a> by Lucas Antoniaci.
+      Используйте только в законных целях.
+    </p>
+  </div>
+</footer>
+
+<script>
+  // ── State ──────────────────────────────────────────────────────────────────
+  let currentTab = 'username';
+  let searchHistory = JSON.parse(localStorage.getItem('bb_history') || '[]');
+  let totalSearches = parseInt(localStorage.getItem('bb_searches') || '0');
+  let totalFound   = parseInt(localStorage.getItem('bb_found')    || '0');
+  let pollTimer    = null;
+  let taskId       = null;
+
+  // ── Init ───────────────────────────────────────────────────────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    updateStats();
+    renderHistory();
+    document.getElementById('searchInput').focus();
+  });
+
+  function updateStats() {
+    document.getElementById('statSearches').textContent = totalSearches || '—';
+    document.getElementById('statFound').textContent    = totalFound    || '—';
+  }
+
+  // ── Tabs ───────────────────────────────────────────────────────────────────
+  function setTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabUsername').classList.toggle('active', tab === 'username');
+    document.getElementById('tabEmail').classList.toggle('active', tab === 'email');
+    const input = document.getElementById('searchInput');
+    if (tab === 'username') {
+      input.placeholder = 'johndoe';
+      document.getElementById('inputLabel').textContent = 'Имя пользователя';
+    } else {
+      input.placeholder = 'user@example.com';
+      document.getElementById('inputLabel').textContent = 'Email адрес';
+    }
+    input.value = '';
+    input.focus();
+    document.getElementById('results').innerHTML = '';
+  }
+
+  // ── History ────────────────────────────────────────────────────────────────
+  function addHistory(query, type) {
+    const entry = { query, type, ts: Date.now() };
+    searchHistory = [entry, ...searchHistory.filter(h => h.query !== query)].slice(0, 8);
+    localStorage.setItem('bb_history', JSON.stringify(searchHistory));
+    renderHistory();
+  }
+
+  function renderHistory() {
+    const block = document.getElementById('historyBlock');
+    const pills = document.getElementById('historyPills');
+    if (!searchHistory.length) { block.style.display = 'none'; return; }
+    block.style.display = 'block';
+    pills.innerHTML = searchHistory.map(h =>
+      `<span class="history-pill" onclick="fillHistory('${h.query}','${h.type}')">${h.type === 'email' ? '✉' : '@'}${h.query}</span>`
+    ).join('');
+  }
+
+  function fillHistory(query, type) {
+    setTab(type);
+    document.getElementById('searchInput').value = query;
+    doSearch();
+  }
+
+  // ── Search ─────────────────────────────────────────────────────────────────
+  async function doSearch() {
+    const input = document.getElementById('searchInput');
+    const query = input.value.trim();
+    if (!query) { input.focus(); shakeInput(); return; }
+
+    const btn  = document.getElementById('searchBtn');
+    const prog = document.getElementById('progressWrap');
+
+    // Reset
+    clearInterval(pollTimer);
+    document.getElementById('results').innerHTML = '';
+    btn.classList.add('loading');
+    btn.disabled = true;
+    prog.classList.add('visible');
+    setProgress(0, 'Запуск поиска...');
+
+    try {
+      // Start search on backend
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, type: currentTab })
+      });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      taskId = data.task_id;
+      addHistory(query, currentTab);
+      pollResults(query);
+
+    } catch (err) {
+      finishSearch();
+      showError(err.message || 'Ошибка соединения с сервером');
+    }
+  }
+
+  function pollResults(query) {
+    let dots = 0;
+    const statusTexts = [
+      'Проверяем социальные сети...',
+      'Сканируем форумы...',
+      'Ищем профили...',
+      'Проверяем платформы...',
+      'Собираем данные...',
+    ];
+    let statusIdx = 0;
+
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/status/${taskId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const pct = data.progress || 0;
+        statusIdx = Math.floor(pct / 25) % statusTexts.length;
+        setProgress(pct, statusTexts[statusIdx]);
+
+        if (data.status === 'done') {
+          clearInterval(pollTimer);
+          finishSearch();
+
+          totalSearches++;
+          totalFound += (data.result?.found?.length || 0);
+          localStorage.setItem('bb_searches', totalSearches);
+          localStorage.setItem('bb_found', totalFound);
+          updateStats();
+
+          renderResults(data.result, query);
+        } else if (data.status === 'error') {
+          clearInterval(pollTimer);
+          finishSearch();
+          showError(data.message || 'Ошибка поиска');
+        }
+      } catch (e) {
+        // keep polling
+      }
+    }, 1200);
+  }
+
+  function setProgress(pct, status) {
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressPct').textContent  = pct + '%';
+    document.getElementById('progressStatus').textContent = status;
+  }
+
+  function finishSearch() {
+    const btn  = document.getElementById('searchBtn');
+    const prog = document.getElementById('progressWrap');
+    btn.classList.remove('loading');
+    btn.disabled = false;
+    prog.classList.remove('visible');
+    setProgress(0, '');
+  }
+
+  function shakeInput() {
+    const el = document.getElementById('searchInput');
+    el.style.borderColor = 'var(--accent2)';
+    setTimeout(() => { el.style.borderColor = ''; }, 800);
+  }
+
+  // ── Render Results ─────────────────────────────────────────────────────────
+  function renderResults(result, query) {
+    const container = document.getElementById('results');
+
+    if (!result || !result.success) {
+      container.innerHTML = `<div class="error-msg fade-up">❌ ${result?.error || 'Неизвестная ошибка'}</div>`;
+      return;
+    }
+
+    const found = result.found || [];
+    const total = result.total_checked || 0;
+    const elapsed = result.elapsed || 0;
+
+    if (!found.length) {
+      container.innerHTML = `
+        <div class="empty-state fade-up">
+          <div class="empty-icon">⭕</div>
+          <div class="empty-title">Аккаунты не найдены</div>
+          <div class="empty-sub">Проверено ${total} сайтов за ${elapsed}с. Попробуйте другой запрос.</div>
+        </div>`;
+      return;
+    }
+
+    // Group by category
+    const cats = {};
+    for (const acc of found) {
+      const cat = acc.category || 'Other';
+      if (!cats[cat]) cats[cat] = [];
+      cats[cat].push(acc);
+    }
+
+    let html = `
+      <div class="results-header fade-up">
+        <div class="results-title">Результаты</div>
+        <div class="results-meta">
+          <span class="badge badge-found">✓ ${found.length} найдено</span>
+          <span class="badge badge-time">⏱ ${elapsed}с / ${total} сайтов</span>
+        </div>
+      </div>`;
+
+    let delay = 0;
+    for (const [cat, accounts] of Object.entries(cats).sort()) {
+      html += `<div class="category-group result-item" style="animation-delay:${delay}s">`;
+      html += `<div class="category-title">${cat} (${accounts.length})</div>`;
+      html += `<div class="account-grid">`;
+      for (const acc of accounts) {
+        const meta = (acc.metadata || []).slice(0, 3);
+        const metaHtml = meta.length ? `<div class="account-meta">${
+          meta.map(m => `<div class="meta-item"><strong>${escHtml(m.name)}:</strong> ${escHtml(String(m.value || ''))}</div>`).join('')
+        }</div>` : '';
+        html += `
+          <a class="account-card" href="${escAttr(acc.url)}" target="_blank" rel="noopener">
+            <div class="account-name"><span class="dot"></span>${escHtml(acc.name)}</div>
+            <div class="account-url">${escHtml(acc.url)}</div>
+            ${metaHtml}
+          </a>`;
+      }
+      html += `</div></div>`;
+      delay += 0.06;
+    }
+
+    container.innerHTML = html;
+  }
+
+  function showError(msg) {
+    document.getElementById('results').innerHTML =
+      `<div class="error-msg fade-up">❌ ${escHtml(msg)}</div>`;
+  }
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function escAttr(s) {
+    return String(s).replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
