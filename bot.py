@@ -67,7 +67,7 @@ class AdminState(StatesGroup):
 
 # ── Texts ─────────────────────────────────────────────────────────────────────
 DISCLAIMER_TEXT = """
-🦅 <b>Blackbird OSINT Bot</b>
+🦅 <b>Recon OSINT Bot</b>
 
 ⚠️ <b>ВАЖНОЕ ПРЕДУПРЕЖДЕНИЕ / IMPORTANT DISCLAIMER</b>
 
@@ -86,6 +86,7 @@ DISCLAIMER_TEXT = """
 ✅ принимаете полную ответственность за свои действия
 ✅ не будете использовать бот для слежки или преследования людей
 
+<b>Я был разработан @aloneabove. Все вопросы к нему 😉.<b>
 ---
 
 <i>This bot is an OSINT tool for public information search. The author takes no responsibility for illegal use. All data is collected from open sources only. By using this bot you agree to use it for legal purposes only.</i>
@@ -94,10 +95,10 @@ DISCLAIMER_TEXT = """
 """
 
 INSTRUCTION_TEXT = """
-📖 <b>Инструкция по использованию Blackbird</b>
+📖 <b>Инструкция по использованию Recon</b>
 
 <b>1. Что это такое</b>
-Blackbird — OSINT-инструмент, который ищет аккаунты человека по username или email на 600+ сайтах и соцсетях.
+Recon — OSINT-инструмент, который ищет аккаунты человека по username или email на 600+ сайтах и соцсетях.
 
 <b>2. Возможности:</b>
 • 🔍 Поиск профилей по username
